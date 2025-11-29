@@ -1,73 +1,21 @@
-# React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+AI Mini-SaaS: Smart Task Evaluator 🚀A production-ready SaaS application that evaluates code quality using Gen-AI. Users can upload code snippets to receive instant feedback on bugs, performance issues, and security vulnerabilities. Detailed refactoring and reports are gated behind a payment wall, simulated via Stripe.🌟 FeaturesAuthentication: Secure Email/Password login via Supabase Auth.AI Code Analysis:Powered by Google Gemini (Multi-model fallback: Flash → Pro → 1.0).Evaluates Score (0-100), Strengths, Weaknesses, and Refactored Code.Robust error handling and JSON parsing.Payment Gating:Reports are locked by default.Stripe Checkout integration (Test Mode) to unlock full analysis.Database:PostgreSQL via Supabase.RLS (Row Level Security) enabled for data privacy.Performance: Built with Vite + React + TypeScript for near-instant load times.🛠️ Tech StackFrontend: React, TypeScript, Vite, Tailwind CSS, Lucide Icons.Backend: Supabase (Auth, Database, Edge Functions).AI: Google Gemini API (gemini-1.5-flash, gemini-1.5-pro).Payments: Stripe API.🚀 Setup & Installation1. Clone the Repositorygit clone [https://github.com/yourusername/ai-task-evaluator.git](https://github.com/yourusername/ai-task-evaluator.git)
+cd ai-task-evaluator
+npm install
+2. Environment VariablesCreate a .env file in the root directory:VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+3. Supabase SetupCreate a new project on Supabase.Run the SQL script provided in supabase/schema.sql (or see below) to create tables (profiles, tasks, payments) and enable RLS.Deploy Edge Functions:npx supabase login
+npx supabase functions deploy evaluate-task
+npx supabase functions deploy create-payment
+Set Secrets in Supabase Dashboard or CLI:npx supabase secrets set GEMINI_API_KEY=AIzaSy...
+npx supabase secrets set STRIPE_SECRET_KEY=sk_test_...
+4. Run Locallynpm run dev
+📂 Project Structuresrc/
+├── components/   # Reusable UI (Navbar, Buttons)
+├── lib/          # Supabase client setup
+├── pages/        # Dashboard, Evaluate, Login, Report
+├── types/        # TypeScript interfaces
+supabase/
+└── functions/
+    ├── evaluate-task/  # AI Analysis (Gemini)
+    └── create-payment/ # Stripe Checkout
+🔒 Security & ArchitectureEdge Functions: API keys (Gemini, Stripe) are never exposed to the client. They live securely in Supabase Edge Functions (Deno).RLS: Database policies ensure users can strictly access only their own data.CORS: Functions are configured to accept requests only from the authorized frontend.📸 Screenshots(Add screenshots of your Dashboard, Locked Report, and Unlocked Report here)
