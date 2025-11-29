@@ -6,40 +6,56 @@ import type { TaskDetail } from '../types';
 
 const ReportPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [processingPayment, setProcessingPayment] = useState(false);
 
   useEffect(() => {
     if (id) {
-      checkPaymentSuccess();
-      getReport();
+      initPage();
     }
   }, [id]);
 
-  const checkPaymentSuccess = async () => {
-    // Check URL for ?success=true (Returned from Stripe)
+  const initPage = async () => {
+    // 1. Check if we are returning from Stripe with success
     const success = searchParams.get('success');
-    if (success && id) {
-      setProcessingPayment(true);
-      // Hackathon Pattern: Update DB based on URL flag
-      // In production, use Webhooks for security
+    
+    if (success === 'true') {
+      await handlePaymentSuccess();
+    } else {
+      // Normal load
+      await getReport();
+    }
+  };
+
+  const handlePaymentSuccess = async () => {
+    setProcessingPayment(true);
+    try {
+      // A. Update Database First
       const { error } = await supabase
         .from('tasks')
         .update({ is_paid: true })
         .eq('id', id);
-        
-      if (!error) {
-        // Clear URL params to look clean
-        window.history.replaceState({}, '', window.location.pathname);
-      }
+
+      if (error) console.error("DB Update Failed:", error);
+
+      // B. Clean URL (remove ?success=true) without reloading
+      setSearchParams({});
+
+      // C. Now Fetch the freshest data (guaranteed to be paid)
+      await getReport();
+
+    } catch (err) {
+      console.error("Payment Success Logic Error:", err);
+    } finally {
       setProcessingPayment(false);
     }
   };
 
   const getReport = async () => {
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
@@ -80,10 +96,10 @@ const ReportPage: React.FC = () => {
     }
   };
 
-  if (loading) return (
+  if (loading || processingPayment) return (
     <div className="flex flex-col items-center justify-center min-h-[50vh] text-slate-500">
         <Loader2 className="h-8 w-8 animate-spin mb-4 text-indigo-500" />
-        <p>Retrieving AI Analysis...</p>
+        <p>{processingPayment ? "Finalizing Payment..." : "Retrieving Analysis..."}</p>
     </div>
   );
 
