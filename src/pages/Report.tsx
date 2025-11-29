@@ -1,17 +1,42 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { Lock, CheckCircle, Terminal, ShieldAlert, Loader2 } from 'lucide-react';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { Lock, CheckCircle, Terminal, ShieldAlert, Loader2, CreditCard } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { TaskDetail } from '../types';
 
 const ReportPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [processingPayment, setProcessingPayment] = useState(false);
 
   useEffect(() => {
-    if (id) getReport();
+    if (id) {
+      checkPaymentSuccess();
+      getReport();
+    }
   }, [id]);
+
+  const checkPaymentSuccess = async () => {
+    // Check URL for ?success=true (Returned from Stripe)
+    const success = searchParams.get('success');
+    if (success && id) {
+      setProcessingPayment(true);
+      // Hackathon Pattern: Update DB based on URL flag
+      // In production, use Webhooks for security
+      const { error } = await supabase
+        .from('tasks')
+        .update({ is_paid: true })
+        .eq('id', id);
+        
+      if (!error) {
+        // Clear URL params to look clean
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+      setProcessingPayment(false);
+    }
+  };
 
   const getReport = async () => {
     try {
@@ -33,21 +58,25 @@ const ReportPage: React.FC = () => {
   const handleUnlock = async () => {
     if (!task) return;
     
-    // In a real app, this confirms payment via Stripe/LemonSqueezy
-    const confirm = window.confirm("Simulate $5 Payment?");
-    
-    if (confirm) {
-      const { error } = await supabase
-        .from('tasks')
-        .update({ is_paid: true })
-        .eq('id', task.id);
-      
-      if (!error) {
-        // Optimistic update: Reveal the content immediately
-        setTask(prev => prev ? { ...prev, is_paid: true } : null);
-      } else {
-        alert("Payment update failed");
+    setProcessingPayment(true);
+    try {
+      // 1. Call Edge Function to get Stripe URL
+      const { data, error } = await supabase.functions.invoke('create-payment', {
+        body: { 
+          taskId: task.id,
+          returnUrl: window.location.href // Send current URL so Stripe knows where to return
+        }
+      });
+
+      if (error) throw error;
+      if (data?.url) {
+        // 2. Redirect User to Stripe
+        window.location.href = data.url;
       }
+    } catch (err) {
+      console.error("Payment Error:", err);
+      alert("Failed to initialize payment. Check console.");
+      setProcessingPayment(false);
     }
   };
 
@@ -110,7 +139,7 @@ const ReportPage: React.FC = () => {
           {isLocked && (
             <div className="absolute inset-0 z-10 bg-white/60 backdrop-blur-md rounded-xl flex flex-col items-center justify-center text-center p-8 border border-white/50">
               <div className="bg-white p-4 rounded-full shadow-xl mb-6">
-                <Lock className="h-8 w-8 text-indigo-600" />
+                <CreditCard className="h-8 w-8 text-indigo-600" />
               </div>
               <h2 className="text-2xl font-bold text-slate-900 mb-2">Unlock Full Analysis</h2>
               <p className="text-slate-600 max-w-md mb-8">
@@ -118,10 +147,18 @@ const ReportPage: React.FC = () => {
               </p>
               <button 
                 onClick={handleUnlock}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-full font-bold shadow-lg hover:shadow-indigo-500/30 transition-all transform hover:-translate-y-1"
+                disabled={processingPayment}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-full font-bold shadow-lg hover:shadow-indigo-500/30 transition-all transform hover:-translate-y-1 flex items-center gap-2"
               >
-                Pay $5.00 to Unlock
+                {processingPayment ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Processing...
+                  </>
+                ) : (
+                  "Pay $5.00 to Unlock"
+                )}
               </button>
+              <p className="text-xs text-slate-400 mt-4">Secured by Stripe</p>
             </div>
           )}
 
