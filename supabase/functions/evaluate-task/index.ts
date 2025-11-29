@@ -1,88 +1,134 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Use a specific, stable version of the Supabase client
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
 
-serve(async (req) => {
-  // Handle CORS for browser requests
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+// Model priority list
+const GEMINI_MODELS = [
+  "gemini-2.5-flash-lite", 
+  "gemini-2.5-flash",   
+  "gemini-2.5-pro"
+];
+
+// MODERN SYNTAX: Use Deno.serve instead of 'serve' import
+Deno.serve(async (req) => {
+  // 1. Handle Preflight (CORS)
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const { taskId, code } = await req.json();
+    console.log("🚀 [Gemini Function] Request received");
 
-    if (!code || !taskId) {
-      throw new Error("Missing code or taskId");
+    // 2. Initialize Supabase Client
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
+
+    // 3. Parse Request Body
+    const { taskId, code } = await req.json()
+    if (!code || !taskId) throw new Error("Missing code or taskId");
+
+    // 4. Verify Gemini Key
+    const geminiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!geminiKey) {
+      throw new Error("Server config error: Missing GEMINI_API_KEY");
     }
 
-    // 1. Construct the Prompt
-    // We strictly ask for JSON so your frontend can parse it easily.
+    // 5. System Prompt
     const systemPrompt = `
-      You are a Senior Code Reviewer. Evaluate the following code snippet.
-      Return ONLY a raw JSON object (no markdown formatting) with this structure:
+      You are a code analysis engine. Analyze the code for bugs, performance, and security.
+      CRITICAL: Return ONLY a raw JSON object. No markdown formatting.
+      JSON Schema:
       {
-        "score": number (0-100),
-        "summary": "Short executive summary of the code quality",
-        "strengths": ["List of 2-3 good points"],
-        "weaknesses": ["List of 2-3 bugs or issues"],
-        "refactored_code": "The complete fixed and optimized code string"
+        "score": number,
+        "summary": "string",
+        "strengths": ["string"],
+        "weaknesses": ["string"],
+        "refactored_code": "string"
       }
     `;
 
-    // 2. Call OpenAI API (or Gemini/Anthropic)
-    const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${Deno.env.get("OPENAI_API_KEY")}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o", // or gpt-3.5-turbo
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Code to evaluate:\n\n${code}` },
-        ],
-        temperature: 0.2, // Low temperature for consistent JSON
-      }),
-    });
+    let aiResponseText = null;
+    let lastError = null;
 
-    const aiData = await aiResponse.json();
-    const content = aiData.choices[0].message.content;
+    // 6. Robust Model Retry Loop
+    for (const model of GEMINI_MODELS) {
+      try {
+        console.log(`🤖 Trying model: ${model}...`);
+        
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{
+                parts: [{
+                  text: `${systemPrompt}\n\nCODE TO EVALUATE:\n${code}`
+                }]
+              }],
+              generationConfig: {
+                responseMimeType: "application/json"
+              }
+            }),
+          }
+        );
 
-    // 3. Parse the JSON result
-    // Sometimes AI wraps json in markdown blocks like \`\`\`json ... \`\`\`, we clean that.
-    const cleanJson = content.replace(/```json/g, "").replace(/```/g, "").trim();
-    const feedback = JSON.parse(cleanJson);
+        const data = await response.json();
+        
+        if (data.error) throw new Error(`API Error: ${data.error.message}`);
 
-    // 4. Save to Supabase Database
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
+        const candidate = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!candidate) throw new Error("Empty response");
 
+        console.log(`✅ Success with ${model}`);
+        aiResponseText = candidate;
+        break; // Success!
+
+      } catch (err: any) {
+        console.warn(`❌ ${model} failed: ${err.message}`);
+        lastError = err;
+      }
+    }
+
+    if (!aiResponseText) {
+      throw new Error(`All models failed. Last error: ${lastError?.message}`);
+    }
+
+    // 7. Parse & Clean JSON
+    const cleanJson = aiResponseText.replace(/```json/g, "").replace(/```/g, "").trim();
+    let feedback;
+    try {
+      feedback = JSON.parse(cleanJson);
+    } catch (e) {
+      console.error("JSON Parse Error:", aiResponseText);
+      throw new Error("AI returned invalid JSON");
+    }
+
+    // 8. Update Database
     const { error: updateError } = await supabaseClient
-      .from("tasks")
-      .update({ 
-        ai_feedback: feedback,
-        // Optional: Update score if you have a separate column, otherwise it's in jsonb
-      })
-      .eq("id", taskId);
+      .from('tasks')
+      .update({ ai_feedback: feedback })
+      .eq('id', taskId)
 
     if (updateError) throw updateError;
 
+    // 9. Return Success
     return new Response(JSON.stringify({ success: true, feedback }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200,
+    })
 
-  } catch (error) {
-    console.error("Error:", error);
+  } catch (error: any) {
+    console.error("🚨 Function Error:", error.message);
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500, // Internal Server Error
+    })
   }
-});
+})
