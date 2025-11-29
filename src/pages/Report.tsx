@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Lock, CheckCircle, Terminal, ShieldAlert, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { TaskDetail } from '../types/index';
+import type { TaskDetail } from '../types';
 
 const ReportPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -24,11 +24,7 @@ const ReportPage: React.FC = () => {
       if (error) throw error;
       setTask(data as any);
     } catch (err) {
-      console.error(err);
-      // For mock purposes if ID not found
-      if (!task && !import.meta.env.VITE_SUPABASE_URL) {
-         // Mock fallback logic for smooth preview
-      }
+      console.error('Error fetching report:', err);
     } finally {
       setLoading(false);
     }
@@ -37,8 +33,9 @@ const ReportPage: React.FC = () => {
   const handleUnlock = async () => {
     if (!task) return;
     
-    // Simulate Payment
-    const confirm = window.confirm("Simulate $5 Payment to Stripe?");
+    // In a real app, this confirms payment via Stripe/LemonSqueezy
+    const confirm = window.confirm("Simulate $5 Payment?");
+    
     if (confirm) {
       const { error } = await supabase
         .from('tasks')
@@ -46,20 +43,10 @@ const ReportPage: React.FC = () => {
         .eq('id', task.id);
       
       if (!error) {
-        // If it was a real app, we would likely refetch to get the AI feedback that might be gated
-        // For this demo, we assume the data updates or we inject the missing pieces
-        setTask(prev => prev ? { 
-            ...prev, 
-            is_paid: true,
-            // Inject mock feedback if it was null (mock mode)
-            ai_feedback: prev.ai_feedback || {
-                score: 92,
-                strengths: ["Great logic separation", "Clear variable names"],
-                weaknesses: ["Missing comments on complex logic"],
-                refactored_code: "// Refactored version...\nconst optimized = () => true;",
-                summary: "Excellent work, just needs minor documentation improvements."
-            }
-        } : null);
+        // Optimistic update: Reveal the content immediately
+        setTask(prev => prev ? { ...prev, is_paid: true } : null);
+      } else {
+        alert("Payment update failed");
       }
     }
   };
@@ -148,7 +135,7 @@ const ReportPage: React.FC = () => {
                 Executive Summary
               </h3>
               <p className="text-slate-600 leading-relaxed">
-                {task.ai_feedback?.summary || "Analysis pending payment..."}
+                {task.ai_feedback?.summary || "Analysis pending or unavailable."}
               </p>
             </div>
 
@@ -157,7 +144,7 @@ const ReportPage: React.FC = () => {
               <div className="bg-green-50 p-5 rounded-xl border border-green-100">
                 <h4 className="font-semibold text-green-800 mb-3">Strengths</h4>
                 <ul className="space-y-2">
-                  {(task.ai_feedback?.strengths || ["Analyzing...", "Analyzing..."]).map((item, i) => (
+                  {(task.ai_feedback?.strengths || []).map((item, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-green-700">
                       <CheckCircle className="h-4 w-4 mt-0.5 shrink-0" />
                       {item}
@@ -168,7 +155,7 @@ const ReportPage: React.FC = () => {
               <div className="bg-red-50 p-5 rounded-xl border border-red-100">
                 <h4 className="font-semibold text-red-800 mb-3">Issues Detected</h4>
                 <ul className="space-y-2">
-                  {(task.ai_feedback?.weaknesses || ["Analyzing...", "Analyzing..."]).map((item, i) => (
+                  {(task.ai_feedback?.weaknesses || []).map((item, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-red-700">
                       <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
                       {item}

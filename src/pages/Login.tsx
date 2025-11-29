@@ -1,58 +1,143 @@
-import React from 'react';
-import { Auth } from '@supabase/auth-ui-react';
-import { ThemeSupa } from '@supabase/auth-ui-shared';
-import { Terminal } from 'lucide-react';
+import React, { useState } from 'react';
+import { Terminal, Mail, Lock, Loader2, ArrowRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { useNavigate } from 'react-router-dom';
 
 const LoginPage: React.FC = () => {
-  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
-  // Check if we are using the mock client (which doesn't have the 'url' property commonly found on real clients)
-  // or checks environment variables to determine if we should render real Auth UI.
-  const isMockClient = !import.meta.env.VITE_SUPABASE_URL;
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrorMsg(null);
+    setInfoMsg(null);
+
+    try {
+      if (isSignUp) {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+        if (error) throw error;
+        setInfoMsg("Success! Check your email for the confirmation link.");
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+        // Navigation is handled automatically by App.tsx listener
+      }
+    } catch (error: any) {
+      setErrorMsg(error.message || "An error occurred during authentication.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-md border border-slate-100">
+        
+        {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center h-12 w-12 rounded-full bg-indigo-100 text-indigo-600 mb-4">
             <Terminal className="h-6 w-6" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">Welcome Back</h1>
-          <p className="text-slate-500 mt-2">Sign in to access your AI evaluations</p>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {isSignUp ? 'Create Account' : 'Welcome Back'}
+          </h1>
+          <p className="text-slate-500 mt-2 text-sm">
+            {isSignUp 
+              ? 'Sign up to start analyzing your code' 
+              : 'Sign in to access your AI evaluations'}
+          </p>
         </div>
 
-        {isMockClient ? (
-          <div className="text-center">
-            <div className="bg-amber-50 text-amber-800 p-4 rounded-md text-sm mb-4 border border-amber-200">
-              <strong>Demo Mode:</strong> No Supabase keys detected.
-            </div>
-            <button 
-              onClick={() => navigate('/dashboard')}
-              className="w-full bg-indigo-600 text-white py-2.5 rounded-lg hover:bg-indigo-700 font-medium transition-all"
-            >
-              Enter Demo Dashboard
-            </button>
+        {/* Error / Info Messages */}
+        {errorMsg && (
+          <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-100">
+            {errorMsg}
           </div>
-        ) : (
-          <Auth 
-            supabaseClient={supabase} 
-            appearance={{ 
-              theme: ThemeSupa,
-              variables: {
-                default: {
-                  colors: {
-                    brand: '#4f46e5',
-                    brandAccent: '#4338ca',
-                  }
-                }
-              }
-            }}
-            providers={['github', 'google']}
-            redirectTo={window.location.origin + '/dashboard'}
-          />
         )}
+        {infoMsg && (
+          <div className="mb-4 p-3 bg-green-50 text-green-700 text-sm rounded-lg border border-green-100">
+            {infoMsg}
+          </div>
+        )}
+
+        {/* Form */}
+        <form onSubmit={handleAuth} className="space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Mail className="h-5 w-5 text-slate-400" />
+              </div>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                placeholder="you@example.com"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Lock className="h-5 w-5 text-slate-400" />
+              </div>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                placeholder="••••••••"
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full flex items-center justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
+          >
+            {loading ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <>
+                {isSignUp ? 'Sign Up' : 'Sign In'}
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </>
+            )}
+          </button>
+        </form>
+
+        {/* Toggle Sign Up / Login */}
+        <div className="mt-6 text-center">
+          <p className="text-sm text-slate-600">
+            {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+            <button
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setErrorMsg(null);
+                setInfoMsg(null);
+              }}
+              className="font-medium text-indigo-600 hover:text-indigo-500 transition-colors"
+            >
+              {isSignUp ? 'Log in' : 'Sign up'}
+            </button>
+          </p>
+        </div>
       </div>
     </div>
   );

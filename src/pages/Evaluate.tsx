@@ -33,14 +33,17 @@ const EvaluatePage: React.FC = () => {
       if (error) throw error;
 
       // 2. Trigger Edge Function for Analysis
-      await supabase.functions.invoke('evaluate-task', {
+      // This now hits your REAL Supabase Edge Function
+      const { error: funcError } = await supabase.functions.invoke('evaluate-task', {
         body: { taskId: task.id, code }
       });
+
+      if (funcError) throw funcError;
 
       navigate(`/report/${task.id}`);
     } catch (err) {
       console.error(err);
-      alert('Failed to submit task. Check console.');
+      alert('Failed to analyze task. Check console for details.');
     } finally {
       setLoading(false);
     }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Code, CheckCircle, Lock, ChevronRight, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import  {Task}  from '../types/index';
+import type {Task}  from '../types/index';
 
 const Dashboard: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
